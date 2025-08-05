@@ -1,37 +1,111 @@
-// /screens/HomeScreen.js
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  ActivityIndicator,
+  Text,
+  TouchableOpacity,
+} from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
+import * as Location from 'expo-location';
 import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../services/firebase';
-
-import { mapStyle } from '../styles/mapStyle'; // Asegúrate de tener un archivo de estilos para el mapa
+import { auth, db } from '../services/firebase';
+import { AntDesign } from '@expo/vector-icons';
+import { mapStyle } from '../styles/mapStyle';
 
 export default function HomeScreen({ navigation }) {
   const [puestos, setPuestos] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  // Función para obtener los datos de Firestore
+  const [userLocation, setUserLocation] = useState(null);
+  const [filteredPuestos, setFilteredPuestos] = useState([]);
+  const [showingAbiertos, setShowingAbiertos] = useState(false);
+
+  useEffect(() => {
+    fetchPuestos();
+    getUserLocation();
+  }, []);
+
   const fetchPuestos = async () => {
     try {
-      const querySnapshot = await getDocs(collection(db, "puestos"));
-      const puestosList = querySnapshot.docs.map(doc => ({
+      const querySnapshot = await getDocs(collection(db, 'puestos'));
+      const puestosList = querySnapshot.docs.map((doc) => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
       }));
       setPuestos(puestosList);
+      setFilteredPuestos(puestosList);
+      setShowingAbiertos(false);
     } catch (error) {
-      console.error("Error al obtener los puestos: ", error);
-      // Aquí podrías mostrar un mensaje de error al usuario
+      console.error('Error al obtener los puestos: ', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // useEffect se ejecuta una vez cuando el componente se monta
-  useEffect(() => {
-    fetchPuestos();
-  }, []);
+  const getUserLocation = async () => {
+    let { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      console.warn('Permiso de ubicación denegado');
+      return;
+    }
+
+    let location = await Location.getCurrentPositionAsync({});
+    setUserLocation(location.coords);
+  };
+
+  const getDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3;
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+    const a =
+      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) *
+      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const mostrarAbiertosCerca = () => {
+    if (!userLocation) {
+      console.warn('Ubicación no disponible');
+      return;
+    }
+
+    const abiertos = puestos.filter((p) => p.estado === 'abierto');
+
+    const cercanos = abiertos
+      .map((p) => ({
+        ...p,
+        distancia: getDistance(
+          userLocation.latitude,
+          userLocation.longitude,
+          p.ubicacion.latitude,
+          p.ubicacion.longitude
+        ),
+      }))
+      .sort((a, b) => a.distancia - b.distancia)
+      .slice(0, 10);
+
+    setFilteredPuestos(cercanos);
+    setShowingAbiertos(true);
+  };
+
+  const mostrarTodos = () => {
+    setFilteredPuestos(puestos);
+    setShowingAbiertos(false);
+  };
+
+  const toggleAuth = () => {
+    if (auth.currentUser) {
+      auth.signOut();
+    } else {
+      navigation.navigate('Login');
+    }
+  };
 
   if (loading) {
     return (
@@ -45,17 +119,18 @@ export default function HomeScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <MapView
-        style={{ flex: 1 }}
+        style={StyleSheet.absoluteFillObject}
         provider="google"
         customMapStyle={mapStyle}
-         initialRegion={{
-          latitude: -27.4698, // Latitud inicial (ej. Corrientes, Argentina)
-          longitude: -58.8304, // Longitud inicial
-          latitudeDelta: 0.0922,
-          longitudeDelta: 0.0421,
+        initialRegion={{
+          latitude: -27.4698,
+          longitude: -58.8304,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
         }}
+        showsUserLocation={true}
       >
-        {puestos.map(puesto => (
+        {filteredPuestos.map((puesto) => (
           <Marker
             key={puesto.id}
             coordinate={{
@@ -64,27 +139,104 @@ export default function HomeScreen({ navigation }) {
             }}
             title={puesto.nombre}
             description={`Estado: ${puesto.estado}`}
-            pinColor={puesto.estado === 'abierto' ? 'green' : '#808080'} // Verde si está abierto, gris si cerrado
-            onCalloutPress={() => navigation.navigate('PuestoDetail', { puestoId: puesto.id })}
+            pinColor={puesto.estado === 'abierto' ? 'green' : '#808080'}
+            onCalloutPress={() =>
+              navigation.navigate('PuestoDetail', {
+                puestoId: puesto.id,
+              })
+            }
           />
         ))}
       </MapView>
-      {/* Aquí irían los filtros en el futuro */}
+
+      {filteredPuestos.length === 0 && (
+        <View style={styles.noResults}>
+          <Text style={styles.noResultsText}>No hay puestos cercanos disponibles.</Text>
+        </View>
+      )}
+
+      {/* Botón login/logout a la izquierda arriba */}
+      <TouchableOpacity
+        style={styles.authButton}
+        onPress={toggleAuth}
+      >
+        <AntDesign
+          name={auth.currentUser ? 'logout' : 'user'}
+          size={24}
+          color="#fff"
+        />
+      </TouchableOpacity>
+
+      {/* Botón “Abiertos cerca” (desactivado si ya mostrando abiertos) */}
+      <TouchableOpacity
+        style={[styles.abiertosCercaButton, showingAbiertos && styles.disabledButton]}
+        onPress={mostrarAbiertosCerca}
+        disabled={showingAbiertos}
+      >
+        <Text style={styles.abiertosCercaText}>Abiertos cerca</Text>
+      </TouchableOpacity>
+
+      {/* Botón “Ver todos” (desactivado si mostrando todos) */}
+      <TouchableOpacity
+        style={[styles.verTodosButton, !showingAbiertos && styles.disabledButton]}
+        onPress={mostrarTodos}
+        disabled={!showingAbiertos}
+      >
+        <Text style={styles.verTodosText}>Ver todos</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { flex: 1 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  authButton: {
+    position: 'absolute',
+    top: 10,
+    left: 20,
+    backgroundColor: '#333',
+    borderRadius: 30,
+    padding: 10,
+    elevation: 5,
+    zIndex: 10,
   },
-  map: {
-    width: '100%',
-    height: '100%',
+  abiertosCercaButton: {
+    position: 'absolute',
+    bottom: 70, // subido un poco más
+    right: 20,
+    backgroundColor: '#4CAF50',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 30,
+    elevation: 5,
   },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  verTodosButton: {
+    position: 'absolute',
+    bottom: 70, // subido un poco más
+    left: 20,
+    backgroundColor: '#2196F3',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 30,
+    elevation: 5,
+  },
+  abiertosCercaText: { color: '#fff', fontWeight: 'bold' },
+  verTodosText: { color: '#fff', fontWeight: 'bold' },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  noResults: {
+    position: 'absolute',
+    top: 100,
+    alignSelf: 'center',
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 8,
+    elevation: 4,
+  },
+  noResultsText: {
+    color: '#444',
+    fontWeight: 'bold',
   },
 });

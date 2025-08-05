@@ -1,104 +1,125 @@
-// /screens/PuestoDetailScreen.js
+// screens/PuestoDetailScreen.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Button } from 'react-native';
-import { doc, getDoc } from 'firebase/firestore';
+import { View, Text, StyleSheet, ActivityIndicator, Button, FlatList, Alert } from 'react-native';
+import { doc, getDoc, collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { getAuth } from 'firebase/auth'; // Importar getAuth
 
 export default function PuestoDetailScreen({ route, navigation }) {
-  const { puestoId } = route.params; // Obtenemos el ID pasado por la navegación
+  const { puestoId } = route.params;
   const [puesto, setPuesto] = useState(null);
+  const [opiniones, setOpiniones] = useState([]);
   const [loading, setLoading] = useState(true);
+  const auth = getAuth(); // Obtener la instancia de Auth
+  const user = auth.currentUser; // Obtener el usuario actual
 
-  const fetchPuesto = async () => {
+  const fetchData = async () => {
+    setLoading(true);
     try {
+      // Obtener datos del puesto
       const docRef = doc(db, "puestos", puestoId);
       const docSnap = await getDoc(docRef);
-
       if (docSnap.exists()) {
         setPuesto({ id: docSnap.id, ...docSnap.data() });
-      } else {
-        console.log("No se encontró el documento!");
       }
+
+      // Obtener opiniones de la subcolección
+      const opinionsQuery = query(collection(db, "puestos", puestoId, "opiniones"), orderBy("fecha", "desc"));
+      const querySnapshot = await getDocs(opinionsQuery);
+      const opinionsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setOpiniones(opinionsList);
+
     } catch (error) {
-      console.error("Error al obtener el puesto: ", error);
+      console.error("Error al obtener los datos: ", error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchPuesto();
-  }, [puestoId]);
+    // Escuchar cambios en la navegación para recargar datos si el usuario inicia sesión
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchData();
+    });
+
+    return unsubscribe; // Limpiar el listener al desmontar
+  }, [navigation, puestoId]);
+
+  // Componente para renderizar cada opinión
+  const renderOpinion = ({ item }) => (
+    <View style={styles.opinionBox}>
+      <Text style={styles.opinionUser}>{item.nombreUsuario} - {'★'.repeat(item.puntuacion)}{'☆'.repeat(5 - item.puntuacion)}</Text>
+      <Text>{item.comentario}</Text>
+    </View>
+  );
 
   if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
+    return <View style={styles.center}><ActivityIndicator size="large" /></View>;
   }
 
   if (!puesto) {
-    return (
-      <View style={styles.center}>
-        <Text>No se pudo cargar la información del puesto.</Text>
-      </View>
-    );
+    return <View style={styles.center}><Text>No se encontró el puesto.</Text></View>;
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{puesto.nombre}</Text>
-      <Text style={styles.detail}>Estado: <Text style={{ color: puesto.estado === 'abierto' ? 'green' : 'red' }}>{puesto.estado}</Text></Text>
-      <Text style={styles.detail}>Tipo de comida: {puesto.tipoComida}</Text>
-      <Text style={styles.subtitle}>Menú:</Text>
-      {/* Aquí mapearías el menú si es un array o un objeto */}
-      <Text style={styles.detail}>- Hamburguesa Simple: $1500</Text>
-      
-      <View style={styles.section}>
-        <Text style={styles.subtitle}>Opiniones:</Text>
-        {/* Aquí mostraremos las opiniones en la FASE 2.3 */}
-        <Text>Aún no hay opiniones.</Text>
-      </View>
-
-      <Button
-        title="Hacer un Encargo"
-        onPress={() => {
-          // Navegar a la pantalla de encargos en la FASE 2.4
-          console.log("Navegando a la pantalla de encargos...");
-        }}
-      />
-    </View>
+    <FlatList
+      data={opiniones}
+      renderItem={renderOpinion}
+      keyExtractor={item => item.id}
+      ListHeaderComponent={
+        <>
+          <View style={styles.headerContainer}>
+            <Text style={styles.title}>{puesto.nombre}</Text>
+            {/* ... otros detalles del puesto ... */}
+            <Text style={styles.detail}>Tipo de comida: {puesto.tipoComida}</Text>
+            
+            <View style={styles.buttonSpacing}>
+              <Button
+                title="Dejar una Opinión"
+                onPress={() => {
+                  if (user) {
+                    navigation.navigate('AddReview', { puestoId: puesto.id });
+                  } else {
+                    Alert.alert("Acción Requerida", "Debes iniciar sesión para dejar una opinión.", [
+                      { text: "Ir a Login", onPress: () => navigation.navigate('Login') },
+                      { text: "Cancelar", style: 'cancel' }
+                    ]);
+                  }
+                }}
+              />
+            </View>
+            <Button
+              title="Hacer un Encargo"
+              onPress={() => console.log("Navegando a encargos...")}
+              color="#28a745"
+            />
+          </View>
+          <Text style={styles.subtitle}>Opiniones Recientes</Text>
+        </>
+      }
+      ListEmptyComponent={<Text style={styles.emptyText}>Todavía no hay opiniones. ¡Sé el primero!</Text>}
+      contentContainerStyle={styles.container}
+    />
   );
 }
 
+// ... (tus estilos existentes, más estos nuevos)
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 20,
-    marginBottom: 5,
-  },
-  detail: {
-    fontSize: 16,
-    marginBottom: 5,
-  },
-  section: {
-    marginTop: 20,
-    marginBottom: 20,
-  }
+    container: { paddingBottom: 20 },
+    headerContainer: { paddingHorizontal: 20, paddingTop: 20 },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    title: { fontSize: 24, fontWeight: 'bold', marginBottom: 10 },
+    subtitle: { fontSize: 18, fontWeight: 'bold', marginTop: 20, marginBottom: 10, paddingHorizontal: 20 },
+    detail: { fontSize: 16, marginBottom: 5 },
+    buttonSpacing: { marginVertical: 15 },
+    opinionBox: {
+        borderWidth: 1,
+        borderColor: '#ddd',
+        padding: 15,
+        marginVertical: 5,
+        marginHorizontal: 20,
+        borderRadius: 5,
+    },
+    opinionUser: { fontWeight: 'bold', marginBottom: 5 },
+    emptyText: { textAlign: 'center', marginTop: 20, color: 'gray', paddingHorizontal: 20 }
 });
