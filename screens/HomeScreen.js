@@ -5,11 +5,13 @@ import {
   ActivityIndicator,
   Text,
   TouchableOpacity,
+  Alert, // Importar Alert
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { collection, getDocs } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { AntDesign } from '@expo/vector-icons';
 import { mapStyle } from '../styles/mapStyle';
 
@@ -19,10 +21,18 @@ export default function HomeScreen({ navigation }) {
   const [userLocation, setUserLocation] = useState(null);
   const [filteredPuestos, setFilteredPuestos] = useState([]);
   const [showingAbiertos, setShowingAbiertos] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
     fetchPuestos();
     getUserLocation();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+    });
+    return unsubscribe;
   }, []);
 
   const fetchPuestos = async () => {
@@ -99,9 +109,21 @@ export default function HomeScreen({ navigation }) {
     setShowingAbiertos(false);
   };
 
+  // Función modificada con confirmación para cerrar sesión
   const toggleAuth = () => {
-    if (auth.currentUser) {
-      auth.signOut();
+    if (currentUser) {
+      Alert.alert(
+        'Cerrar sesión',
+        '¿Estás seguro que deseas cerrar sesión?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { 
+            text: 'Cerrar sesión', 
+            style: 'destructive',
+            onPress: () => auth.signOut()
+          }
+        ]
+      );
     } else {
       navigation.navigate('Login');
     }
@@ -155,19 +177,17 @@ export default function HomeScreen({ navigation }) {
         </View>
       )}
 
-      {/* Botón login/logout a la izquierda arriba */}
       <TouchableOpacity
         style={styles.authButton}
         onPress={toggleAuth}
       >
         <AntDesign
-          name={auth.currentUser ? 'logout' : 'user'}
+          name={currentUser ? 'logout' : 'user'}
           size={24}
           color="#fff"
         />
       </TouchableOpacity>
 
-      {/* Botón “Abiertos cerca” (desactivado si ya mostrando abiertos) */}
       <TouchableOpacity
         style={[styles.abiertosCercaButton, showingAbiertos && styles.disabledButton]}
         onPress={mostrarAbiertosCerca}
@@ -176,7 +196,6 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.abiertosCercaText}>Abiertos cerca</Text>
       </TouchableOpacity>
 
-      {/* Botón “Ver todos” (desactivado si mostrando todos) */}
       <TouchableOpacity
         style={[styles.verTodosButton, !showingAbiertos && styles.disabledButton]}
         onPress={mostrarTodos}
@@ -203,7 +222,7 @@ const styles = StyleSheet.create({
   },
   abiertosCercaButton: {
     position: 'absolute',
-    bottom: 70, // subido un poco más
+    bottom: 70,
     right: 20,
     backgroundColor: '#4CAF50',
     paddingVertical: 10,
@@ -213,7 +232,7 @@ const styles = StyleSheet.create({
   },
   verTodosButton: {
     position: 'absolute',
-    bottom: 70, // subido un poco más
+    bottom: 70,
     left: 20,
     backgroundColor: '#2196F3',
     paddingVertical: 10,

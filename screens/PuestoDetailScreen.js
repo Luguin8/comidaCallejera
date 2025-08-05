@@ -69,8 +69,12 @@ export default function PuestoDetailScreen({ route, navigation }) {
       ListHeaderComponent={
         <>
           <View style={styles.headerContainer}>
-            <Text style={styles.title}>{puesto.nombre}</Text>
+            <Text style={styles.title}>
+              {puesto.nombre} - {'★'} {puesto.promedioPuntaje ? puesto.promedioPuntaje.toFixed(1) : '0.0'}</Text>
             {/* ... otros detalles del puesto ... */}
+            <Text style={styles.detail}>
+              {puesto.cantidadOpiniones || 0} opinión{(puesto.cantidadOpiniones === 1) ? '' : 'es'}</Text>
+
             <Text style={styles.detail}>Tipo de comida: {puesto.tipoComida}</Text>
             
             <View style={styles.buttonSpacing}>
@@ -89,9 +93,10 @@ export default function PuestoDetailScreen({ route, navigation }) {
               />
             </View>
             <Button
-              title="Hacer un Encargo"
+              title="Hacer un Encargo (proximamente)"
               onPress={() => console.log("Navegando a encargos...")}
               color="#28a745"
+              disabled={true} // Deshabilitado por ahora
             />
           </View>
           <Text style={styles.subtitle}>Opiniones Recientes</Text>

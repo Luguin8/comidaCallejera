@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, TouchableOpacity } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, serverTimestamp, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
 
 const AddReviewScreen = () => {
   const route = useRoute();
@@ -13,8 +13,40 @@ const AddReviewScreen = () => {
   const [comment, setComment] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const firestore = getFirestore();
+  const auth = getAuth();
+
+  // Función para actualizar el promedio de puntaje solo con opiniones de usuarios logueados
+  const actualizarPromedio = async (puestoId) => {
+    try {
+      const opinionesRef = collection(firestore, "puestos", puestoId, "opiniones");
+      const q = query(opinionesRef, where("usuarioLogueado", "==", true));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        const puestoRef = doc(firestore, "puestos", puestoId);
+        await updateDoc(puestoRef, { promedioPuntaje: 0, cantidadOpiniones: 0 });
+        return;
+      }
+
+      let suma = 0;
+      querySnapshot.forEach(doc => {
+        const data = doc.data();
+        suma += data.puntuacion || 0;
+      });
+
+      const promedio = suma / querySnapshot.size;
+      const puestoRef = doc(firestore, "puestos", puestoId);
+      await updateDoc(puestoRef, {
+        promedioPuntaje: Number(promedio.toFixed(1)),
+        cantidadOpiniones: querySnapshot.size
+      });
+    } catch (error) {
+      console.error("Error actualizando promedio:", error);
+    }
+  };
+
   const handleSubmit = async () => {
-    const auth = getAuth();
     const user = auth.currentUser;
 
     if (!user) {
@@ -29,13 +61,11 @@ const AddReviewScreen = () => {
 
     if (!comment.trim()) {
       Alert.alert('Comentario vacío', 'Aunque es opcional, tu experiencia ayuda a otros.');
-      // Comentá el return si querés permitir igualmente la publicación sin comentario
+      // Puedes comentar el return si querés permitir publicar sin comentario
       // return;
     }
 
     setLoading(true);
-
-    const firestore = getFirestore();
 
     try {
       await addDoc(collection(firestore, 'puestos', puestoId, 'opiniones'), {
@@ -43,8 +73,12 @@ const AddReviewScreen = () => {
         comentario: comment.trim(),
         usuario: user.uid,
         nombreUsuario: user.isAnonymous ? 'Anónimo' : user.email.split('@')[0],
+        usuarioLogueado: !user.isAnonymous, // <-- Aquí: true si no es anónimo
         fecha: serverTimestamp(),
       });
+
+      // Actualizar promedio después de guardar la opinión
+      await actualizarPromedio(puestoId);
 
       Alert.alert('Opinión publicada', 'Gracias por dejar tu reseña.');
       navigation.goBack();

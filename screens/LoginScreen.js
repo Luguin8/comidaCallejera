@@ -51,6 +51,7 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      {/* Campos de email y contraseña */}
       <TextInput
         placeholder="Email"
         value={email}
@@ -67,17 +68,31 @@ export default function LoginScreen({ navigation }) {
         secureTextEntry={true}
       />
 
+      {/* Botones para login y registro */}
       <View style={styles.buttonContainer}>
         <Button title="Ingresar" onPress={handleLogin} />
         <Button title="Registrarse" onPress={handleSignUp} />
       </View>
 
+      {/* Opción para recuperar contraseña */}
       <TouchableOpacity onPress={forgotPassword} style={styles.forgotContainer}>
         <Text style={styles.forgotText}>¿Olvidaste tu contraseña?</Text>
       </TouchableOpacity>
 
+      {/* Separador visual */}
       <View style={styles.separator} />
+
+      {/* Botón para login anónimo */}
       <Button title="Continuar como Anónimo" onPress={handleAnonymousLogin} color="#841584" />
+
+      {/* --- NUEVO BOTÓN para ir a pantalla dueños --- */}
+      <View style={{ marginTop: 20 }}>
+        <Button
+          title="Ingreso Dueños"
+          onPress={() => navigation.navigate('DuenosLogin')}
+          color="#FF6600"
+        />
+      </View>
     </View>
   );
 }

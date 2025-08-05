@@ -8,6 +8,7 @@ import AddReviewScreen from '../screens/AddReviewScreen';
 
 import HomeScreen from '../screens/HomeScreen';
 import PuestoDetailScreen from '../screens/PuestoDetailScreen';
+import DuenosLoginScreen from '../screens/DuenosLoginScreen';
 // Importa otras pantallas a medida que las crees
 
 const Stack = createNativeStackNavigator();
@@ -21,6 +22,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Login" component={LoginScreen} options={{ title: 'Ingresar o Registrarse' }} />
         <Stack.Screen name="Register" component={RegisterScreen} options={{ title: 'Registrarse' }} />
         <Stack.Screen name="AddReview" component={AddReviewScreen} options={{ title: 'Dejar una Opinión' }} />
+        <Stack.Screen name="DuenosLogin" component={DuenosLoginScreen} options={{ title: 'Ingreso Dueños' }} />
         {/* Aquí agregarás las pantallas de , Encargos, etc. */}
       </Stack.Navigator>
     </NavigationContainer>
